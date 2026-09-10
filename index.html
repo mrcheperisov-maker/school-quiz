@@ -54,7 +54,7 @@
       font-size: 16px;
       font-weight: 600;
       cursor: pointer;
-      transition: transform 0.1s ease;
+      transition: background-color 0.2s ease, transform 0.1s ease;
     }
 
     .btn:active { transform: scale(0.98); }
@@ -146,6 +146,7 @@
     let score = 0;
     let timeLeft = 90;
     let timerInterval = null;
+    let isAnswering = false;
 
     async function startGame() {
       const category = document.getElementById('category-select').value;
@@ -154,7 +155,6 @@
       document.getElementById('setup-screen').classList.add('hidden');
       document.getElementById('game-screen').classList.remove('hidden');
 
-      // Запрос к Supabase с фильтрацией по классу и предмету
       let query = _supabase.from('questions').select('*').eq('grade', grade);
       if (category !== 'ALL') {
         query = query.eq('category', category);
@@ -195,6 +195,7 @@
         return;
       }
 
+      isAnswering = false;
       const q = questions[currentQ];
       document.getElementById('question-text').innerText = q.question;
 
@@ -207,21 +208,43 @@
         const btn = document.createElement('button');
         btn.className = 'btn btn-option';
         btn.innerText = opt;
-        btn.onclick = () => answer(idx === q.correct_index);
+        btn.onclick = () => handleAnswer(idx, q.correct_index);
         container.appendChild(btn);
       });
     }
 
-    function answer(isCorrect) {
+    function handleAnswer(selectedIdx, correctIdx) {
+      if (isAnswering) return;
+      isAnswering = true;
+
+      const isCorrect = selectedIdx === correctIdx;
+      const container = document.getElementById('options-container');
+      const buttons = container.querySelectorAll('.btn-option');
+
       if (tg?.HapticFeedback) {
         tg.HapticFeedback.notificationOccurred(isCorrect ? 'success' : 'error');
       }
 
-      if (isCorrect) score += 100;
-      document.getElementById('score-val').innerText = score;
+      buttons.forEach((btn, idx) => {
+        btn.disabled = true;
+        if (idx === correctIdx) {
+          btn.style.backgroundColor = '#2ecc71';
+          btn.style.color = '#fff';
+        } else if (idx === selectedIdx && !isCorrect) {
+          btn.style.backgroundColor = '#e74c3c';
+          btn.style.color = '#fff';
+        }
+      });
 
-      currentQ++;
-      showQuestion();
+      if (isCorrect) {
+        score += 100;
+        document.getElementById('score-val').innerText = score;
+      }
+
+      setTimeout(() => {
+        currentQ++;
+        showQuestion();
+      }, 800);
     }
 
     function endGame() {
