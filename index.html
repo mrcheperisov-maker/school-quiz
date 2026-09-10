@@ -7,9 +7,7 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -35,7 +33,6 @@
       margin-top: 10px;
     }
 
-    /* Все заголовки теперь явно тёмного цвета */
     h2 { 
       margin-top: 0; 
       font-size: 20px; 
@@ -52,7 +49,6 @@
       margin-top: 8px;
     }
 
-    /* Гарантируем видимость текста вопроса */
     #question-text {
       font-size: 18px !important;
       font-weight: 600 !important;
@@ -60,8 +56,6 @@
       margin: 16px 0 !important;
       line-height: 1.4 !important;
       display: block !important;
-      visibility: visible !important;
-      opacity: 1 !important;
       word-wrap: break-word;
     }
 
@@ -82,6 +76,12 @@
       -webkit-tap-highlight-color: transparent;
     }
 
+    .btn-secondary {
+      background-color: #f0f2f5 !important;
+      color: #0088cc !important;
+      border: 1px solid #0088cc !important;
+    }
+
     .btn:active { transform: scale(0.98); }
 
     .btn-option {
@@ -93,7 +93,6 @@
       word-wrap: break-word;
     }
 
-    /* Подсветка ответов */
     .btn-option.correct {
       background-color: #2ecc71 !important;
       color: #ffffff !important;
@@ -127,16 +126,40 @@
       margin-bottom: 12px;
     }
 
-    .timer {
-      font-size: 16px;
-      font-weight: bold;
-      color: #e74c3c !important;
+    .timer { font-size: 16px; font-weight: bold; color: #e74c3c !important; }
+    .score { font-size: 16px; font-weight: bold; color: #27ae60 !important; }
+
+    /* Таблица лидеров */
+    .leaderboard-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 14px;
     }
 
-    .score {
-      font-size: 16px;
+    .leaderboard-table th, .leaderboard-table td {
+      padding: 10px 8px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+      color: #222222 !important;
+    }
+
+    .leaderboard-table th {
+      color: #777777 !important;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    .leaderboard-table td.rank {
+      font-weight: bold;
+      width: 30px;
+      text-align: center;
+    }
+
+    .leaderboard-table td.score-cell {
       font-weight: bold;
       color: #27ae60 !important;
+      text-align: right;
     }
 
     .hidden { display: none !important; }
@@ -144,7 +167,7 @@
 </head>
 <body>
 
-  <!-- 1. ЭКРАН ВЫБОРА КА ТЕГОРИИ И КЛАССА -->
+  <!-- 1. ЭКРАН ВЫБОРА КАТЕГОРИИ И КЛАССА -->
   <div id="setup-screen" class="card">
     <h2>🏆 Школьная Лига Загадок</h2>
     <p>Настройте игру под себя:</p>
@@ -153,7 +176,10 @@
     <select id="category-select" class="select-box">
       <option value="ALL">Все предметы</option>
       <option value="История Казахстана" selected>История Казахстана</option>
-      <option value="Математика">Математика</option>
+      <option value="Алгебра и Геометрия">Алгебра и Геометрия</option>
+      <option value="Биология">Биология</option>
+      <option value="Русский язык">Русский язык</option>
+      <option value="Казахский язык">Казахский язык</option>
     </select>
 
     <label class="label-text">Выберите класс:</label>
@@ -166,6 +192,7 @@
     </select>
 
     <button class="btn" onclick="startGame()">🚀 Начать игру</button>
+    <button class="btn btn-secondary" onclick="openLeaderboard()">🥇 Таблица лидеров</button>
   </div>
 
   <!-- 2. ЭКРАН ИГРЫ -->
@@ -184,6 +211,25 @@
     <p>Отличный результат!</p>
     <h1 id="final-score" style="color: #0088cc !important; font-size: 32px; margin: 16px 0;">0 очков</h1>
     <button class="btn" onclick="restart()">🔄 Играть снова</button>
+    <button class="btn btn-secondary" onclick="openLeaderboard()">🥇 Таблица лидеров</button>
+  </div>
+
+  <!-- 4. ЭКРАН ТАБЛИЦЫ ЛИДЕРОВ -->
+  <div id="leaderboard-screen" class="card hidden">
+    <h2>🥇 Топ-10 Знатоков</h2>
+    <div id="leaderboard-loading">Загрузка данных...</div>
+    <table class="leaderboard-table hidden" id="leaderboard-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Игрок</th>
+          <th style="text-align:right;">Очки</th>
+        </tr>
+      </thead>
+      <tbody id="leaderboard-body"></tbody>
+    </table>
+    <br>
+    <button class="btn" onclick="closeLeaderboard()">⬅️ Назад</button>
   </div>
 
   <script>
@@ -193,9 +239,16 @@
       tg.ready();
     }
 
+    // Данные Telegram-пользователя
+    const user = tg?.initDataUnsafe?.user || {
+      id: 999999,
+      first_name: "Тестовый Игрок",
+      username: "test_player"
+    };
+
     // Данные Supabase
     const SUPABASE_URL = 'https://qiyperbwugvoagunpnqz.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_1m3l40R7HG-Nc8SvtBKysg_bcZi1_vO'; // <-- Вставьте ваш ANON_KEY здесь
+    const SUPABASE_KEY = 'sb_publishable_1m3l40R7HG-Nc8SvtBKysg_bcZi1_vO'; // <-- Замените на ваш ANON_KEY
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let questions = [];
@@ -210,6 +263,7 @@
       const grade = parseInt(document.getElementById('grade-select').value);
 
       document.getElementById('setup-screen').classList.add('hidden');
+      document.getElementById('leaderboard-screen').classList.add('hidden');
       document.getElementById('game-screen').classList.remove('hidden');
 
       let query = _supabase.from('questions').select('*').eq('grade', grade);
@@ -220,7 +274,7 @@
       const { data, error } = await query;
 
       if (error || !data || data.length === 0) {
-        alert('Для выбранного класса и предмета пока нет вопросов. Попробуйте выбрать другой класс или "Все предметы"!');
+        alert('Для выбранного класса и предмета пока нет вопросов. Попробуйте выбрать 7 класс!');
         restart();
         return;
       }
@@ -302,17 +356,101 @@
       }, 900);
     }
 
-    function endGame() {
+    async function endGame() {
       clearInterval(timerInterval);
       document.getElementById('game-screen').classList.add('hidden');
       document.getElementById('result-screen').classList.remove('hidden');
       document.getElementById('final-score').innerText = `${score} очков`;
+
+      // Сохраняем/обновляем рекорд в Supabase
+      if (user && user.id) {
+        try {
+          const { data: existing } = await _supabase
+            .from('leaderboard')
+            .select('score')
+            .eq('telegram_id', user.id)
+            .single();
+
+          if (!existing) {
+            await _supabase.from('leaderboard').insert({
+              telegram_id: user.id,
+              first_name: user.first_name || 'Игрок',
+              username: user.username || '',
+              score: score
+            });
+          } else if (score > existing.score) {
+            await _supabase.from('leaderboard').update({
+              score: score,
+              first_name: user.first_name || 'Игрок',
+              username: user.username || '',
+              updated_at: new Date()
+            }).eq('telegram_id', user.id);
+          }
+        } catch (e) {
+          console.error("Ошибка сохранения результата:", e);
+        }
+      }
+    }
+
+    async function openLeaderboard() {
+      document.getElementById('setup-screen').classList.add('hidden');
+      document.getElementById('result-screen').classList.add('hidden');
+      document.getElementById('leaderboard-screen').classList.remove('hidden');
+      
+      const loadingEl = document.getElementById('leaderboard-loading');
+      const tableEl = document.getElementById('leaderboard-table');
+      const bodyEl = document.getElementById('leaderboard-body');
+
+      loadingEl.classList.remove('hidden');
+      loadingEl.innerText = "Загрузка данных...";
+      tableEl.classList.add('hidden');
+      bodyEl.innerHTML = '';
+
+      const { data, error } = await _supabase
+        .from('leaderboard')
+        .select('*')
+        .order('score', { ascending: false })
+        .limit(10);
+
+      loadingEl.classList.add('hidden');
+
+      if (error || !data || data.length === 0) {
+        loadingEl.innerText = "Пока нет результатов. Будьте первым!";
+        loadingEl.classList.remove('hidden');
+        return;
+      }
+
+      tableEl.classList.remove('hidden');
+
+      data.forEach((player, index) => {
+        const tr = document.createElement('tr');
+        
+        let rankBadge = `${index + 1}`;
+        if (index === 0) rankBadge = '🥇';
+        else if (index === 1) rankBadge = '🥈';
+        else if (index === 2) rankBadge = '🥉';
+
+        const name = player.first_name || (player.username ? `@${player.username}` : 'Ученик');
+
+        tr.innerHTML = `
+          <td class="rank">${rankBadge}</td>
+          <td>${name}</td>
+          <td class="score-cell">${player.score}</td>
+        `;
+        bodyEl.appendChild(tr);
+      });
+    }
+
+    function closeLeaderboard() {
+      document.getElementById('leaderboard-screen').classList.add('hidden');
+      document.getElementById('setup-screen').classList.remove('hidden');
     }
 
     function restart() {
       clearInterval(timerInterval);
       document.getElementById('result-screen').classList.add('hidden');
       document.getElementById('game-screen').classList.add('hidden');
+      document.getElementById('leaderboard-screen').classList.add('hidden');
       document.getElementById('setup-screen').classList.remove('hidden');
     }
   </script>
