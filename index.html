@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Школьная Лига Загадок</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg-color: #0d1b2a;
+      --card-bg: #1b263b;
+      --accent-color: #00b4d8;
+      --text-color: #ffffff;
+      --correct-color: #2ec4b6;
+      --wrong-color: #e63946;
+    }
+    body {
+      margin: 0;
+      padding: 16px;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      box-sizing: border-box;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      padding: 12px 16px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    .timer {
+      font-size: 20px;
+      font-weight: bold;
+      color: #ffb703;
+    }
+    .score {
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 20px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      text-align: center;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+      margin-bottom: 20px;
+    }
+    .category {
+      font-size: 14px;
+      text-transform: uppercase;
+      color: var(--accent-color);
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+    .question {
+      font-size: 18px;
+      line-height: 1.4;
+      font-weight: 600;
+    }
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .btn-option {
+      background: var(--card-bg);
+      border: 2px solid var(--accent-color);
+      color: white;
+      padding: 14px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-option:active {
+      transform: scale(0.98);
+    }
+    .btn-option.correct {
+      background: var(--correct-color) !important;
+      border-color: var(--correct-color) !important;
+    }
+    .btn-option.wrong {
+      background: var(--wrong-color) !important;
+      border-color: var(--wrong-color) !important;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="score">🏆 Очки: <span id="score-val">0</span></div>
+    <div class="timer">⏱️ <span id="timer-val">90</span>s</div>
+  </div>
+
+  <div class="card" id="quiz-card">
+    <div class="category" id="quiz-cat">Лига Загадок</div>
+    <div class="question" id="quiz-q">Загружаем вопросы из базы...</div>
+  </div>
+
+  <div class="options-grid" id="options-container"></div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    const SUPABASE_URL = "https://qiyperbwugvoagunpnqz.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_1m3l40R7HG-Nc8SvtBKysg_bcZi1_vO";
+
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let questions = [];
+    let currentQ = 0;
+    let score = 0;
+    let timeLeft = 90;
+    let timerInterval;
+
+    async function loadQuestions() {
+      const { data, error } = await _supabase
+        .from('questions')
+        .select('*');
+
+      if (error || !data || data.length === 0) {
+        console.error('Ошибка получения данных:', error);
+        document.getElementById('quiz-q').innerText = "Ошибка загрузки вопросов 😞";
+        return;
+      }
+
+      questions = data.map(q => ({
+        category: q.category,
+        q: q.question,
+        options: typeof q.options === 'string' ? JSON.parse(q.options) : q.options,
+        correct: q.correct_index
+      }));
+
+      startTimer();
+      renderQuestion();
+    }
+
+    function startTimer() {
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('timer-val').innerText = timeLeft;
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          endGame();
+        }
+      }, 1000);
+    }
+
+    function renderQuestion() {
+      if (currentQ >= questions.length) {
+        endGame();
+        return;
+      }
+      const item = questions[currentQ];
+      document.getElementById('quiz-cat').innerText = item.category;
+      document.getElementById('quiz-q').innerText = item.q;
+
+      const container = document.getElementById('options-container');
+      container.innerHTML = '';
+
+      item.options.forEach((opt, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn-option';
+        btn.innerText = opt;
+        btn.onclick = () => checkAnswer(btn, idx, item.correct);
+        container.appendChild(btn);
+      });
+    }
+
+    function checkAnswer(btn, selected, correct) {
+      const allBtns = document.querySelectorAll('.btn-option');
+      allBtns.forEach(b => b.disabled = true);
+
+      if (selected === correct) {
+        btn.classList.add('correct');
+        score += 100;
+        document.getElementById('score-val').innerText = score;
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+      } else {
+        btn.classList.add('wrong');
+        allBtns[correct].classList.add('correct');
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+      }
+
+      setTimeout(() => {
+        currentQ++;
+        renderQuestion();
+      }, 1200);
+    }
+
+    function endGame() {
+      clearInterval(timerInterval);
+      document.getElementById('quiz-card').innerHTML = `
+        <div class="category">Игра завершена!</div>
+        <div class="question">Отличный результат!<br>Вы набрали: <b>${score} очков</b></div>
+      `;
+      document.getElementById('options-container').innerHTML = '';
+      tg.MainButton.setText("ЗАКРЫТЬ ИГРУ").show().onClick(() => tg.close());
+    }
+
+    loadQuestions();
+  </script>
+</body>
+</html>
